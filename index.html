@@ -8,58 +8,285 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
-    <!-- Наши стили -->
-    <link rel="stylesheet" href="css/style.css">
-    
-    <!-- Firebase (сначала загружаем библиотеки) -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: sans-serif; overflow: hidden; }
+        #game-container { width: 100vw; height: 100vh; }
+        
+        #login-screen {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100vh; background: linear-gradient(135deg, #667eea, #764ba2); color: white;
+        }
+        #login-screen h1 { font-size: 2.5em; margin-bottom: 20px; }
+        #login-screen input { padding: 12px; margin: 10px; width: 280px; border: none; border-radius: 8px; }
+        #login-screen button { padding: 12px 35px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-size: 1.1em; cursor: pointer; }
+        
+        #game-screen { display: none; flex-direction: column; height: 100vh; }
+        #header { background: #2c3e50; color: white; padding: 10px 20px; display: flex; justify-content: space-between; }
+        
+        /* ⚠️ КРИТИЧНО: Карта должна иметь размер! */
+        #map { flex: 1; width: 100%; height: 100%; }
+        
+        #chat-panel {
+            position: absolute; bottom: 20px; left: 20px; width: 320px; height: 280px;
+            background: white; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            display: flex; flex-direction: column; z-index: 1000;
+        }
+        #chat-messages { flex: 1; overflow-y: auto; padding: 12px; }
+        .chat-msg { margin: 5px 0; padding: 8px; background: #f1f1f1; border-radius: 5px; }
+        #chat-input-area { display: flex; padding: 10px; border-top: 1px solid #ddd; }
+        #chat-input { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 5px; }
+        #chat-input-area button { margin-left: 8px; padding: 8px 15px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        
+        #players-list {
+            position: absolute; top: 70px; right: 20px; width: 220px;
+            background: white; padding: 12px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 1000;
+        }
+        #players-list h4 { margin-bottom: 8px; }
+        #players-list ul { list-style: none; }
+        #players-list li { padding: 4px 0; border-bottom: 1px solid #eee; }
+        
+        #debug { position: fixed; bottom: 5px; right: 5px; background: rgba(0,0,0,0.7); color: #0f0; padding: 5px 10px; font-size: 11px; z-index: 2000; }
+    </style>
 </head>
 <body>
     <div id="game-container">
         <!-- Экран входа -->
         <div id="login-screen">
             <h1>🏘️ Добрянка Online</h1>
-            <p>Виртуальная прогулка по родному городу</p>
             <input type="text" id="player-name" placeholder="Ваше имя" maxlength="20">
-            <button onclick="game.login()">Войти в игру</button>
-            <p id="error-msg" style="color: #ff6b6b; margin-top: 10px; display: none;"></p>
+            <button onclick="startGame()">▶ Войти</button>
+            <p id="status" style="margin-top:15px; font-size:0.9em;"></p>
         </div>
 
         <!-- Игровой экран -->
-        <div id="game-screen" style="display:none;">
+        <div id="game-screen">
             <div id="header">
-                <div id="player-info">
-                    <span id="current-player"></span>
-                    <span id="online-count">👥 Онлайн: 0</span>
-                </div>
-                <div id="location-info">📍 Загрузка...</div>
+                <span id="player-display"></span>
+                <span id="online-count">👥 Онлайн: 0</span>
             </div>
-
             <div id="map"></div>
-
+            
             <div id="chat-panel">
                 <div id="chat-messages"></div>
                 <div id="chat-input-area">
-                    <input type="text" id="chat-input" placeholder="Написать сообщение...">
-                    <button onclick="game.sendChat()">➤</button>
+                    <input type="text" id="chat-input" placeholder="Сообщение..." onkeypress="if(event.key==='Enter')sendChat()">
+                    <button onclick="sendChat()">➤</button>
                 </div>
             </div>
-
+            
             <div id="players-list">
-                <h3>Игроки рядом:</h3>
-                <ul id="nearby-players"></ul>
+                <h4>👥 Рядом:</h4>
+                <ul id="nearby-list"></ul>
             </div>
         </div>
     </div>
-
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
-    <!-- Наши скрипты (строго по порядку!) -->
-    <script src="js/config.js"></script>
-    <script src="js/multiplayer.js"></script>
-    <script src="js/locations.js"></script>
-    <script src="js/game.js"></script>
+    <div id="debug">Статус: ожидание...</div>
+
+    <!-- Библиотеки -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    
+    <!-- Наш код -->
+    <script>
+        // ===== КОНФИГУРАЦИЯ =====
+        const CONFIG = {
+            center: { lat: 58.47048, lng: 56.42323 },
+            zoom: 15,
+            locations: [
+                { name: 'ДК им. Ладугина', lat: 58.462566, lng: 56.404884, icon: '🎭' },
+                { name: 'Набережная', lat: 58.4685, lng: 56.4150, icon: '🌊' },
+                { name: 'Яблоневый сквер', lat: 58.4695, lng: 56.4180, icon: '🌳' }
+            ]
+        };
+
+        // ⚠️ ВСТАВЬТЕ СЮДА ВАШИ ДАННЫЕ ИЗ FIREBASE CONSOLE!
+        const firebaseConfig = {
+  apiKey: "AIzaSyDchQvziVVbplcpCf3DxbblzIstgMn302M",
+  authDomain: "dobryanka-game.firebaseapp.com",
+  projectId: "dobryanka-game",
+  storageBucket: "dobryanka-game.firebasestorage.app",
+  messagingSenderId: "284921901802",
+  appId: "1:284921901802:web:bcf92b6fad2cbf7c805d93",
+  measurementId: "G-MWB689C5BN"
+};
+
+        // ===== ИНИЦИАЛИЗАЦИЯ =====
+        let db, map, playerMarker, playerId, playerName, myPos;
+        const debug = el => document.getElementById('debug').textContent = 'Статус: ' + el;
+
+        function initFirebase() {
+            try {
+                firebase.initializeApp(firebaseConfig);
+                db = firebase.database();
+                debug('✅ Firebase OK');
+                return true;
+            } catch(e) {
+                debug('❌ Firebase: ' + e.message);
+                console.error(e);
+                return false;
+            }
+        }
+
+        function initMap() {
+            try {
+                map = L.map('map').setView([CONFIG.center.lat, CONFIG.center.lng], CONFIG.zoom);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OSM', maxZoom: 19
+                }).addTo(map);
+                
+                // Маркеры локаций
+                CONFIG.locations.forEach(loc => {
+                    L.marker([loc.lat, loc.lng]).addTo(map)
+                        .bindPopup(`<b>${loc.icon} ${loc.name}</b>`);
+                });
+                
+                debug('✅ Карта OK');
+                return true;
+            } catch(e) {
+                debug('❌ Карта: ' + e.message);
+                console.error(e);
+                return false;
+            }
+        }
+
+        // ===== ИГРОВАЯ ЛОГИКА =====
+        function startGame() {
+            playerName = document.getElementById('player-name').value.trim() || 'Аноним';
+            playerId = 'p_' + Math.random().toString(36).slice(2, 10);
+            
+            if (!initFirebase()) {
+                document.getElementById('status').textContent = '❌ Ошибка Firebase! См. консоль (F12)';
+                document.getElementById('status').style.color = '#ff6b6b';
+                return;
+            }
+            
+            if (!initMap()) {
+                document.getElementById('status').textContent = '❌ Ошибка карты!';
+                return;
+            }
+            
+            // Переключаем экраны
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'flex';
+            document.getElementById('player-display').textContent = `👤 ${playerName}`;
+            
+            // Регистрируем игрока
+            registerPlayer();
+            
+            // Следим за позицией
+            map.locate({ setView: true, maxZoom: 16, watch: true });
+            map.on('locationfound', onLocationFound);
+            map.on('locationerror', () => onLocationFound({ latlng: CONFIG.center }));
+            
+            // Подписки
+            subscribeToPlayers();
+            subscribeToChat();
+            
+            debug('🎮 Игра запущена!');
+        }
+
+        function onLocationFound(e) {
+            myPos = e.latlng;
+            
+            if (playerMarker) map.removeLayer(playerMarker);
+            playerMarker = L.marker([myPos.lat, myPos.lng], {
+                icon: L.divIcon({ html: '👤', className: '', iconSize: [24, 24] })
+            }).addTo(map).bindPopup('Вы');
+            
+            updatePlayerPosition();
+        }
+
+        function registerPlayer() {
+            const data = {
+                id: playerId, name: playerName,
+                position: CONFIG.center,
+                location: 'Добрянка', lastSeen: Date.now()
+            };
+            db.ref('players/' + playerId).set(data);
+            
+            // Heartbeat каждые 5 сек
+            setInterval(() => {
+                if (myPos) updatePlayerPosition();
+                else db.ref('players/' + playerId + '/lastSeen').set(Date.now());
+            }, 5000);
+        }
+
+        function updatePlayerPosition() {
+            if (!myPos || !playerId) return;
+            db.ref('players/' + playerId).update({
+                position: myPos, lastSeen: Date.now()
+            });
+        }
+
+        function subscribeToPlayers() {
+            db.ref('players').on('value', snap => {
+                const players = snap.val() || {};
+                const now = Date.now();
+                
+                // Чистим старых
+                Object.keys(players).forEach(id => {
+                    if (now - (players[id].lastSeen || 0) > 20000) {
+                        db.ref('players/' + id).remove();
+                    }
+                });
+                
+                // Обновляем список
+                const online = Object.values(players).filter(p => p.id !== playerId).length;
+                document.getElementById('online-count').textContent = `👥 Онлайн: ${online + 1}`;
+                
+                // Рядом
+                const nearby = Object.values(players).filter(p => {
+                    if (p.id === playerId || !p.position) return false;
+                    return getDistance(myPos || CONFIG.center, p.position) < 500;
+                });
+                
+                const list = document.getElementById('nearby-list');
+                list.innerHTML = nearby.length ? nearby.map(p => `<li>👤 ${p.name}</li>`).join('') : '<li>— никого —</li>';
+            });
+        }
+
+        function sendChat() {
+            const input = document.getElementById('chat-input');
+            const msg = input.value.trim();
+            if (!msg || !playerId) return;
+            
+            db.ref('chat').push({
+                playerId, playerName, message: msg,
+                timestamp: Date.now()
+            });
+            input.value = '';
+        }
+
+        function subscribeToChat() {
+            db.ref('chat').limitToLast(50).on('child_added', snap => {
+                const m = snap.val();
+                const div = document.createElement('div');
+                div.className = 'chat-msg';
+                div.innerHTML = `<strong>${m.playerName}</strong>: ${m.message}`;
+                document.getElementById('chat-messages').appendChild(div);
+                document.getElementById('chat-messages').scrollTop = 99999;
+            });
+        }
+
+        function getDistance(p1, p2) {
+            const R = 6371e3;
+            const toRad = d => d * Math.PI / 180;
+            const dLat = toRad(p2.lat - p1.lat);
+            const dLon = toRad(p2.lng - p1.lng);
+            const a = Math.sin(dLat/2)**2 + Math.cos(toRad(p1.lat))*Math.cos(toRad(p2.lat))*Math.sin(dLon/2)**2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        }
+
+        // Закрытие: убираем игрока при уходе
+        window.addEventListener('beforeunload', () => {
+            if (playerId) db.ref('players/' + playerId).remove();
+        });
+
+        // Статус при загрузке
+        debug('🔄 Загрузка...');
+    </script>
 </body>
 </html>
