@@ -4,10 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Добрянка Online</title>
-    <link rel="stylesheet" href="css/style.css">
+    
+    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
-    <!-- Firebase (версия 9 compat для простоты) -->
+    <!-- Наши стили -->
+    <link rel="stylesheet" href="css/style.css">
+    
+    <!-- Firebase (сначала загружаем библиотеки) -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 </head>
@@ -19,6 +23,7 @@
             <p>Виртуальная прогулка по родному городу</p>
             <input type="text" id="player-name" placeholder="Ваше имя" maxlength="20">
             <button onclick="game.login()">Войти в игру</button>
+            <p id="error-msg" style="color: #ff6b6b; margin-top: 10px; display: none;"></p>
         </div>
 
         <!-- Игровой экран -->
@@ -48,8 +53,10 @@
         </div>
     </div>
 
-    <!-- Скрипты -->
+    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Наши скрипты (строго по порядку!) -->
     <script src="js/config.js"></script>
     <script src="js/multiplayer.js"></script>
     <script src="js/locations.js"></script>
