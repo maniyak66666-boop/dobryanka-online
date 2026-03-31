@@ -177,10 +177,22 @@
             registerPlayer();
             
             // Следим за позицией
-            map.locate({ setView: true, maxZoom: 16, watch: true });
             map.on('locationfound', onLocationFound);
-            map.on('locationerror', () => onLocationFound({ latlng: CONFIG.center }));
-            
+map.on('locationerror', function(e) {
+    console.log('Геолокация не доступна, ставим Добрянку');
+    onLocationFound({ latlng: CONFIG.center });
+});
+
+// Пробуем определить местоположение
+map.locate({ setView: false, maxZoom: 16, watch: true, enableHighAccuracy: true });
+
+// Если через 3 секунды не определилось — ставим Добрянку
+setTimeout(() => {
+    if (!myPos) {
+        console.log('Таймаут геолокации, ставим Добрянку');
+        onLocationFound({ latlng: CONFIG.center });
+    }
+}, 3000);
             // Подписки
             subscribeToPlayers();
             subscribeToChat();
