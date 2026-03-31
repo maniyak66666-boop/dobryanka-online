@@ -184,7 +184,9 @@ map.on('locationerror', function(e) {
 });
 
 // Пробуем определить местоположение
-map.locate({ setView: false, maxZoom: 16, watch: true, enableHighAccuracy: true });
+// Для теста всегда начинаем с Добрянки
+onLocationFound({ latlng: CONFIG.center });
+// map.locate({ setView: true, maxZoom: 16, watch: true });
 
 // Если через 3 секунды не определилось — ставим Добрянку
 setTimeout(() => {
