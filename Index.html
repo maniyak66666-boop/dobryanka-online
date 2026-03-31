@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Добрянка Online</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Firebase (версия 9 compat для простоты) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+</head>
+<body>
+    <div id="game-container">
+        <!-- Экран входа -->
+        <div id="login-screen">
+            <h1>🏘️ Добрянка Online</h1>
+            <p>Виртуальная прогулка по родному городу</p>
+            <input type="text" id="player-name" placeholder="Ваше имя" maxlength="20">
+            <button onclick="game.login()">Войти в игру</button>
+        </div>
+
+        <!-- Игровой экран -->
+        <div id="game-screen" style="display:none;">
+            <div id="header">
+                <div id="player-info">
+                    <span id="current-player"></span>
+                    <span id="online-count">👥 Онлайн: 0</span>
+                </div>
+                <div id="location-info">📍 Загрузка...</div>
+            </div>
+
+            <div id="map"></div>
+
+            <div id="chat-panel">
+                <div id="chat-messages"></div>
+                <div id="chat-input-area">
+                    <input type="text" id="chat-input" placeholder="Написать сообщение...">
+                    <button onclick="game.sendChat()">➤</button>
+                </div>
+            </div>
+
+            <div id="players-list">
+                <h3>Игроки рядом:</h3>
+                <ul id="nearby-players"></ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Скрипты -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/multiplayer.js"></script>
+    <script src="js/locations.js"></script>
+    <script src="js/game.js"></script>
+</body>
+</html>
