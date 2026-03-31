@@ -27,7 +27,13 @@
         /* ⚠️ КРИТИЧНО: Карта должна иметь размер! */
         #map { flex: 1; width: 100%; height: 100%; }
         
-        #chat-panel {
+        #chat-panel
+<div id="controls-hint">
+    <strong>Управление:</strong><br>
+    <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> — ходить<br>
+    🖱️ Клик — перейти в точку
+</div>
+ {
             position: absolute; bottom: 20px; left: 20px; width: 320px; height: 280px;
             background: white; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
             display: flex; flex-direction: column; z-index: 1000;
@@ -153,7 +159,12 @@
         }
 
         // ===== ИГРОВАЯ ЛОГИКА =====
-        function startGame() {
+        function startGame() 
+// ... после subscribeToChat();
+setupControls();  // ← ДОБАВИТЬ ЭТУ СТРОКУ
+
+debug('🎮 Игра запущена! Управление: WASD / Клик');
+{
             playerName = document.getElementById('player-name').value.trim() || 'Аноним';
             playerId = 'p_' + Math.random().toString(36).slice(2, 10);
             
@@ -197,13 +208,172 @@ setTimeout(() => {
 }, 3000);
             // Подписки
             subscribeToPlayers();
+// Хранилище маркеров других игроков
+const otherPlayerMarkers = {};
+
+function subscribeToPlayers() {
+    db.ref('players').on('value', snap => {
+        const players = snap.val() || {};
+        const now = Date.now();
+        
+        // Удаляем оффлайн игроков
+        Object.keys(players).forEach(id => {
+            if (now - (players[id].lastSeen || 0) > 20000) {
+                db.ref('players/' + id).remove();
+                if (otherPlayerMarkers[id]) {
+                    map.removeLayer(otherPlayerMarkers[id]);
+                    delete otherPlayerMarkers[id];
+                }
+            }
+        });
+        
+        // Обновляем маркеры
+        Object.values(players).forEach(p => {
+            if (p.id === playerId || !p.position) return;
+            
+            if (!otherPlayerMarkers[p.id]) {
+                // Создаём новый маркер
+                otherPlayerMarkers[p.id] = L.marker([p.position.lat, p.position.lng], {
+                    icon: L.divIcon({ 
+                        html: '👤', 
+                        className: 'other-player',
+                        iconSize: [24, 24] 
+                    })
+                }).addTo(map).bindPopup(`<b>${p.name}</b><br><small>${p.location}</small>`);
+            } else {
+                // Перемещаем существующий
+                otherPlayerMarkers[p.id].setLatLng([p.position.lat, p.position.lng]);
+                otherPlayerMarkers[p.id].setPopupContent(`<b>${p.name}</b><br><small>${p.location}</small>`);
+            }
+        });
+        
+        // Обновляем статистику
+        const online = Object.values(players).filter(p => p.id !== playerId).length;
+        document.getElementById('online-count').textContent = `👥 Онлайн: ${online + 1}`;
+        
+        // Игроки рядом
+        const nearby = Object.values(players).filter(p => {
+            if (p.id === playerId || !p.position) return false;
+            return getDistance(myPos || CONFIG.center, p.position) < 500;
+        });
+        
+        const list = document.getElementById('nearby-list');
+        list.innerHTML = nearby.length 
+            ? nearby.map(p => `<li>👤 ${p.name} <small>(${p.location})</small></li>`).join('') 
+            : '<li>— никого рядом —</li>';
+    });
+}
             subscribeToChat();
             
             debug('🎮 Игра запущена!');
         }
 
+
         function onLocationFound(e) {
             myPos = e.latlng;
+
+// ===== ОБРАБОТКА КЛАВИАТУРЫ =====
+function setupControls() {
+    // Нажатие клавиш
+    document.addEventListener('keydown', (e) => {
+        switch(e.key.toLowerCase()) {
+            case 'w': case 'arrowup': moveDirection.up = true; break;
+            case 's': case 'arrowdown': moveDirection.down = true; break;
+            case 'a': case 'arrowleft': moveDirection.left = true; break;
+            case 'd': case 'arrowright': moveDirection.right = true; break;
+        }
+        if (!isMoving) gameLoop();
+    });
+    
+    // Отпускание клавиш
+    document.addEventListener('keyup', (e) => {
+        switch(e.key.toLowerCase()) {
+            case 'w': case 'arrowup': moveDirection.up = false; break;
+            case 's': case 'arrowdown': moveDirection.down = false; break;
+            case 'a': case 'arrowleft': moveDirection.left = false; break;
+            case 'd': case 'arrowright': moveDirection.right = false; break;
+        }
+    });
+    
+    // Клик по карте — переход в точку
+    map.on('click', function(e) {
+        moveToPosition(e.latlng);
+    });
+    
+    debug('⌨️ Управление включено');
+}
+
+// ===== ИГРОВОЙ ЦИКЛ (движение) =====
+function gameLoop() {
+    if (!myPos) { animationFrame = null; return; }
+    
+    let moved = false;
+    let newPos = { lat: myPos.lat, lng: myPos.lng };
+    
+    if (moveDirection.up) { newPos.lat += playerSpeed; moved = true; }
+    if (moveDirection.down) { newPos.lat -= playerSpeed; moved = true; }
+    if (moveDirection.left) { newPos.lng -= playerSpeed; moved = true; }
+    if (moveDirection.right) { newPos.lng += playerSpeed; moved = true; }
+    
+    if (moved) {
+        myPos = newPos;
+        
+        // Обновляем маркер
+        if (playerMarker) {
+            playerMarker.setLatLng([myPos.lat, myPos.lng]);
+        }
+        
+        // Отправляем позицию в базу (не чаще 10 раз в секунду)
+        if (!window.lastMoveUpdate) window.lastMoveUpdate = 0;
+        const now = Date.now();
+        if (now - window.lastMoveUpdate > 100) {
+            updatePlayerPosition();
+            window.lastMoveUpdate = now;
+        }
+    }
+    
+    // Продолжаем цикл если двигаемся
+    if (moveDirection.up || moveDirection.down || moveDirection.left || moveDirection.right) {
+        animationFrame = requestAnimationFrame(gameLoop);
+    } else {
+        isMoving = false;
+        animationFrame = null;
+    }
+}
+
+// ===== ПЕРЕХОД В ТОЧКУ ПО КЛИКУ =====
+function moveToPosition(target) {
+    // Плавная анимация перехода
+    const steps = 30;
+    let step = 0;
+    const start = { lat: myPos.lat, lng: myPos.lng };
+    
+    function animate() {
+        step++;
+        const progress = step / steps;
+        // Ease-out анимация
+        const eased = 1 - Math.pow(1 - progress, 3);
+        
+        myPos = {
+            lat: start.lat + (target.lat - start.lat) * eased,
+            lng: start.lng + (target.lng - start.lng) * eased
+        };
+        
+        if (playerMarker) {
+            playerMarker.setLatLng([myPos.lat, myPos.lng]);
+        }
+        
+        // Обновляем позицию в базе каждые 5 шагов
+        if (step % 5 === 0) updatePlayerPosition();
+        
+        if (step < steps) {
+            requestAnimationFrame(animate);
+        } else {
+            updatePlayerPosition(); // Финальное обновление
+        }
+    }
+    animate();
+}
             
             if (playerMarker) map.removeLayer(playerMarker);
             playerMarker = L.marker([myPos.lat, myPos.lng], {
@@ -227,19 +397,31 @@ setTimeout(() => {
                 else db.ref('players/' + playerId + '/lastSeen').set(Date.now());
             }, 5000);
         }
-
-        function updatePlayerPosition() {
-            if (!myPos || !playerId) return;
-            db.ref('players/' + playerId).update({
-                position: myPos, lastSeen: Date.now()
-            });
+function updatePlayerPosition() {
+    if (!myPos || !playerId) return;
+    
+    // Определяем название локации
+    let locationName = 'Улицы Добрянки';
+    for (let loc of CONFIG.locations) {
+        const dist = getDistance(myPos, {lat: loc.lat, lng: loc.lng});
+        if (dist < 150) {
+            locationName = loc.name;
+            break;
         }
-
-        function subscribeToPlayers() {
-            db.ref('players').on('value', snap => {
-                const players = snap.val() || {};
-                const now = Date.now();
+    }
+    
+    db.ref('players/' + playerId).update({
+        position: myPos,
+        location: locationName,
+        lastSeen: Date.now()
+    });
+}
                 
+// ===== УПРАВЛЕНИЕ ПЕРСОНАЖЕМ =====
+let playerSpeed = 0.00005; // Скорость (градусы за кадр)
+let moveDirection = { up: false, down: false, left: false, right: false };
+let isMoving = false;
+let animationFrame = null;
                 // Чистим старых
                 Object.keys(players).forEach(id => {
                     if (now - (players[id].lastSeen || 0) > 20000) {
